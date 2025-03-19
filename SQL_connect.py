@@ -75,3 +75,56 @@ class ConnectSQL:
             f"drop database if exists {self.env_dict["database"]}; create database if not exists {self.env_dict["database"]};"
         )
         self.create_connection(True)
+
+    def create_table(self, table_name: str, table_info: list[str]) -> None:
+        try:
+            query: str = (
+                f"drop table if exists {table_name}; create table if not exists {table_name} ({", ".join(table_info)})"
+            )
+            self.run_query(query)
+            self.database_info[table_name] = table_info
+        except Exception as error:
+            print(f"Error creating table '{table_name}':\n\t", error)
+
+    def create_tables(
+        self, table_dict: dict[str, list[str]], data_paths: dict[str, list[str]] = None
+    ) -> None:
+        for table_name, table_info in table_dict.items():
+            self.create_table(table_name, table_info)
+
+        if data_paths is None:
+            return
+
+        for table_name in table_dict:
+            if table_name not in table_dict:
+                continue
+            self.insert_data(table_name, path.join(*data_paths[table_name]))
+
+    def insert_data(self, table_name: str, csv_path: str) -> None:
+        columns = self.columns(table_name)
+        with open(csv_path, "r") as csv_file:
+            csv_reader = csv.reader(csv_file)
+            list_of_csv = list(csv_reader)
+
+        headers: list[str] = list_of_csv[0]
+        data: list[list[str]] = list_of_csv[1:]
+
+        print(
+            f"Mapping {csv_path} to {table_name} with following conventions:\n\t{"\n\t".join([f"{csv_column} -> {table_column}" for csv_column, table_column in zip(headers, columns)])}"
+        )
+        query: str = (
+            f"insert into {table_name} ({", ".join(columns)}) values ({", ".join(["%s" for _ in columns])})"
+        )
+        self.run_many_queries(query, data)
+
+    def columns(self, table_name: str) -> list[str]:
+        """
+        Returns column names of a desired table.
+        Note: column names CANNOT contain whitespace.
+        """
+        if table_name not in self.database_info:
+            print(f"Table {table_name} does not exist.")
+            return []
+        return [
+            column_info.split()[0] for column_info in self.database_info[table_name]
+        ]
