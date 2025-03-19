@@ -45,6 +45,30 @@ class ConnectSQL:
 
     def commit(self) -> None:
         self.connection.commit()
+
+    def run_query(self, query: str, auto_commit: bool = True) -> None:
+        try:
+            # Splits at ";" since the cursor can't handle multiple queries in one string.
+            for query in query.split(";"):
+                self.cursor.execute(query)
+
+            if not auto_commit:
+                return
+            self.commit()
+        except Exception as error:
+            print(f"Error executing query '{query}':\n\t", error)
+
+    def run_many_queries(
+        self, query: str, data: list[list[str]], auto_commit: bool = True
+    ) -> None:
+        try:
+            self.cursor.executemany(query, data)
+            if not auto_commit:
+                return
+            self.commit()
+        except Exception as error:
+            print(f"Error executing queries '{query}':\n\t", error)
+
     def reset_database(self) -> None:
         self.create_connection(False)
         self.run_query(
