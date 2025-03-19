@@ -128,3 +128,59 @@ class ConnectSQL:
         return [
             column_info.split()[0] for column_info in self.database_info[table_name]
         ]
+
+    def select(self, table_name: str, columns: list[str] | str | None = None) -> list:
+        """
+        Takes table name and columns and returns given columns from desired table as list.
+        To select all columns let the argument columns be None (default behavior).
+        To select multiple columns provide a list of column names.
+        A single column can be provided as a string.
+        """
+        if table_name not in self.database_info:
+            print(f"Table {table_name} does not exist.")
+            return []
+
+        if columns is None:
+            columns = "*"
+        elif type(columns) is list:
+            columns = ", ".join(columns)
+
+        query: str = f"select {columns} from {table_name}"
+        self.cursor.execute(query)
+        return self.cursor.fetchall()
+
+    def update(
+        self,
+        table_name: str,
+        update_list: list[tuple[str]],
+        conditions: list[tuple[str]],
+        auto_commit: bool = True,
+    ) -> None:
+        if table_name not in self.database_info:
+            print(f"Table {table_name} does not exist.")
+            return
+
+        condition_str: str = ", ".join(
+            [f"{column} {logic} {repr(value)}" for column, logic, value in conditions]
+        )
+        update_str: str = ", ".join(
+            [f"{column} = {repr(value)}" for column, value in update_list]
+        )
+
+        query: str = f"update {table_name} set {update_str} where {condition_str}"
+
+        self.run_query(query, auto_commit)
+
+    def delete(
+        self, table_name: str, conditions: list[tuple[str]], auto_commit: bool = True
+    ) -> None:
+        if table_name not in self.database_info:
+            print(f"Table {table_name} does not exist.")
+            return
+
+        condition_str: str = ", ".join(
+            [f"{column} {logic} {repr(value)}" for column, logic, value in conditions]
+        )
+
+        query: str = f"delete from {table_name} where {condition_str}"
+        self.run_query(query, auto_commit)
