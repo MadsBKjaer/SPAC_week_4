@@ -53,6 +53,12 @@ if __name__ == "__main__":
         database.add_key("orders", "order_id")
         database.add_key("customers", "customer_id", "orders")
         database.add_key("products", "product_id", "orders")
+        join_query = database.join(
+            ["orders", "products", "customers"], "inner", ["product_id", "customer_id"]
+        )
+        print(join_query)
+        result = database.select(join_query)
+        print(result)
         pass
     except Exception as error:
         print(f"Error running test:", error)

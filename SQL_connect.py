@@ -147,9 +147,9 @@ class ConnectSQL:
         To select multiple columns provide a list of column names.
         A single column can be provided as a string.
         """
-        if table not in self.database_info:
-            print(f"Table {table} does not exist.")
-            return []
+        # if table not in self.database_info:
+        #     print(f"Table {table} does not exist.")
+        #     return []
 
         if columns is None:
             columns = "*"
@@ -232,3 +232,14 @@ class ConnectSQL:
             f"references {primary_table}({primary_column})"
         )
         self.run_query(foreign_query)
+
+    def join(self, tables: list[str], join_type: str, columns: list[str]) -> str:
+        if not set(tables).issubset(self.database_info):
+            print(f"One of tables {tables} does not exist.")
+            return
+
+        query: str = f"{tables[0]} "
+        for i, table in enumerate(tables[1:]):
+            query += f"{join_type} join {table} on {tables[0]}.{columns[i]} = {table}.{columns[i]} "
+
+        return query
