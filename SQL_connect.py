@@ -1,47 +1,111 @@
 from environs import env
-import mysql.connector as sql
 import csv
 from os import path
 
+import mysql.connector as sql
+import mysql.connector.cursor as sql_cursor
+
 
 class ConnectSQL:
-    env_dict: dict[str, str]
+    connection: sql.MySQLConnection
+    cursor: sql_cursor.MySQLCursor
+    env_key: str
     database_info: dict[str, list[str]]
 
-    def __init__(self, env_key: str, reset_database: bool = False) -> None:
-        self.env_dict = env.dict(env_key)
-        self.database_info = {}
+    def __init__(self, env_key: str | None = None, database: str | None = None) -> None:
+        """
+        Initializes ConnectSQL class.
+        If env_key is provided retrieves connection info from .env file.
+        .env file should include of following shape:
+            env_key = "user=_____,password=_____,host=_____,port=_____"
+        If a database is provided an attempt is made to connect the database.
 
-        if reset_database:
-            self.reset_database()
-        else:
-            self.create_connection(True)
+        >>> database = ConnectSQL()
+        >>> database = ConnectSQL(database = "tech_store")
+        >>> database = ConnectSQL("localhost")
+        >>> database = ConnectSQL("localhost", "tech_store")
+        >>> database = ConnectSQL("localhost", "unknown_database")
+        Error selecting database: 1049 (42000): Unknown database 'unknown_database'
+        """
+        if env_key is None:
+            return
+        self.env_key = env_key
+        self.connect()
+        self.create_cursor()
+        if database:
+            self.use_database(database)
+
+    def connect(self, connection_args: dict[str, str] | None = None) -> None:
+        """
+        Creates connection.
+        The env_key is used if connection_args is not provided.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.connect()
+        >>> database.connect({"host" : "localhost", "password" : "250202", "user" : "root"})
+        >>> database.connect({"host" : "localhost", "user" : "root"})
+        Error creating connection: 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+        """
+        if connection_args is None:
+            connection_args = env.dict(self.env_key)
+        try:
+            self.connection = sql.connect(**connection_args)
+        except Exception as e:
+            print(f"Error creating connection:", e)
+
+    def create_cursor(self) -> None:
+        """
+        Creates cursor.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.connect()
+        >>> database.create_cursor()
+        >>> database = ConnectSQL()
+        >>> database.create_cursor()
+        Error creating cursor: 'ConnectSQL' object has no attribute 'connection'
+        """
+        try:
+            self.cursor = self.connection.cursor()
+        except Exception as e:
+            print(f"Error creating cursor:", e)
+
+    def create_database(
+        self, database: str, use: bool = True, overwrite: bool = False
+    ) -> None:
+        """
+        Creates database.
+        Takes a database name, use: whether or not created database should be used right away and if any existing database of same name should be overwritten.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database")
+        >>> database.cursor.execute("select database()")
+        >>> database.cursor.fetchall()
+        [('new_database',)]
+        """
+        if overwrite:
+            self.cursor.execute(f"drop database if exists {database}")
+        self.cursor.execute(f"create database if not exists {database}")
+
+        if use:
+            self.use_database(database)
+
+    def use_database(self, database: str) -> None:
+        """
+        Selects database to use.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.use_database("tech_store")
+        >>> database.use_database("unknown_database")
+        Error selecting database: 1049 (42000): Unknown database 'unknown_database'
+        """
+        try:
+            self.cursor.execute(f"use {database}")
+        except Exception as e:
+            print(f"Error selecting database:", e)
 
     def close_all(self) -> None:
         self.cursor.close()
         self.connection.close()
-
-    def create_connection(self, to_database: bool) -> None:
-        try:
-            if to_database:
-                self.connection = sql.connect(**self.env_dict)
-            else:
-                self.connection = sql.connect(
-                    user=self.env_dict["user"],
-                    password=self.env_dict["password"],
-                    host=self.env_dict["host"],
-                    port=self.env_dict["port"],
-                )
-            self.create_cursor()
-
-        except Exception as error:
-            print(f"Error creating connection:\n\t", error)
-
-    def create_cursor(self) -> None:
-        try:
-            self.cursor = self.connection.cursor()
-        except Exception as error:
-            print(f"Error creating cursor:\n\t", error)
 
     def commit(self) -> None:
         self.connection.commit()
@@ -68,13 +132,6 @@ class ConnectSQL:
             self.commit()
         except Exception as error:
             print(f"Error executing queries '{query}':\n\t", error)
-
-    def reset_database(self) -> None:
-        self.create_connection(False)
-        self.run_query(
-            f"drop database if exists {self.env_dict["database"]}; create database if not exists {self.env_dict["database"]};"
-        )
-        self.create_connection(True)
 
     def create_table(self, table: str, table_info: list[str]) -> None:
         """
