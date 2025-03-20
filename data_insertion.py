@@ -42,12 +42,17 @@ if __name__ == "__main__":
 
     try:
         database.create_tables(tables, data_paths)
-        database.update(
-            "products",
-            [("product_name", "Phone"), ("product_price", 10000)],
-            [("product_name", "=", "Phone")],
-        )
-        database.delete("products", [("product_name", "=", "Phone")])
+        # database.update(
+        #     "products",
+        #     [("product_name", "Phone"), ("product_price", 10000)],
+        #     [("product_name", "=", "Phone")],
+        # )
+        # database.delete("products", [("product_name", "=", "Phone")])
+        # print(database.database_info)
+        # print(database.tables())
+        database.add_key("orders", "order_id")
+        database.add_key("customers", "customer_id", "orders")
+        database.add_key("products", "product_id", "orders")
         pass
     except Exception as error:
         print(f"Error running test:", error)
