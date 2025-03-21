@@ -21,11 +21,13 @@ class ConnectSQL:
         If a database is provided an attempt is made to connect the database.
 
         >>> database = ConnectSQL()
-        >>> database = ConnectSQL(database = "tech_store")
+        >>> database = ConnectSQL(database = "new_database")
         >>> database = ConnectSQL("localhost")
-        >>> database = ConnectSQL("localhost", "tech_store")
+        >>> database.create_database("new_database", overwrite = True)
+        >>> database = ConnectSQL("localhost", "new_database")
         >>> database = ConnectSQL("localhost", "unknown_database")
         Error selecting database: 1049 (42000): Unknown database 'unknown_database'
+        >>> database.close_all()
         """
         self.connection = None
         self.cursor = None
@@ -43,29 +45,33 @@ class ConnectSQL:
         Creates connection.
         The env_key is used if connection_args is not provided.
 
-        >>> database = ConnectSQL("localhost")
-        >>> database.connect()
-        >>> database.connect({"host" : "localhost", "password" : "250202", "user" : "root"})
-        >>> database.connect({"host" : "localhost", "user" : "root"})
+        >>> database = ConnectSQL()
+        >>> database.connect({"user" : "root", "password" : "250202", "host" : "localhost", "port" : "3306"})
+        >>> database.close_all()
+        >>> database.connect({"user" : "root", "host" : "localhost", "port" : "3306"})
         Error creating connection: 1045 (28000): Access denied for user 'root'@'localhost' (using password: NO)
+        >>> database.close_all()
         """
         if connection_args is None:
             connection_args = env.dict(self.env_key)
         try:
             self.connection = sql.connect(**connection_args)
         except Exception as e:
+            # self.connection = None
             print(f"Error creating connection:", e)
 
     def create_cursor(self) -> None:
         """
         Creates cursor.
 
-        >>> database = ConnectSQL("localhost")
-        >>> database.connect()
+        >>> database = ConnectSQL()
+        >>> database.connect({"user" : "root", "password" : "250202", "host" : "localhost", "port" : "3306"})
         >>> database.create_cursor()
+        >>> database.close_all()
         >>> database = ConnectSQL()
         >>> database.create_cursor()
         Error creating cursor: 'NoneType' object has no attribute 'cursor'
+        >>> database.close_all()
         """
         try:
             self.cursor = self.connection.cursor()
@@ -74,7 +80,7 @@ class ConnectSQL:
 
     def close_all(self) -> None:
         """
-        Closes oth cursor and connection.
+        Closes both cursor and connection.
 
         >>> database = ConnectSQL("localhost")
         >>> database.close_all()
@@ -94,11 +100,19 @@ class ConnectSQL:
         Takes a database name, use: whether or not created database should be used right away and if any existing database of same name should be overwritten.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database")
+        >>> database.create_database("new_database", overwrite = True)
         >>> database.cursor.execute("select database()")
-        >>> databases = database.cursor.fetchall()
-        >>> ("new_database",) in databases
+        >>> ("new_database",) in database.cursor.fetchall()
         True
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database", use = False, overwrite = True)
+        >>> database.cursor.execute("show databases")
+        >>> ("new_database",) in database.cursor.fetchall()
+        True
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
         """
         try:
             if overwrite:
@@ -110,30 +124,20 @@ class ConnectSQL:
         if use:
             self.use_database(database)
 
-    def drop_database(self, database: str) -> None:
-        """
-        Drops database.
-
-        >>> database = ConnectSQL("localhost")
-        >>> database.drop_database("new_database")
-        >>> database.cursor.execute("show databases")
-        >>> databases = database.cursor.fetchall()
-        >>> ("new_database",) in databases
-        False
-        """
-        try:
-            self.cursor.execute(f"drop database if exists {database}")
-        except Exception as e:
-            print(f"Error dropping database:", e)
-
     def use_database(self, database: str) -> None:
         """
         Selects database to use.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.use_database("tech_store")
+        >>> database.create_database("new_database", use = False, overwrite = True)
+        >>> database.use_database("new_database")
+        >>> database.cursor.execute("select database()")
+        >>> ("new_database",) in database.cursor.fetchall()
+        True
+        >>> database.drop_database("new_database")
         >>> database.use_database("unknown_database")
         Error selecting database: 1049 (42000): Unknown database 'unknown_database'
+        >>> database.close_all()
         """
         try:
             self.cursor.execute(f"use {database}")
@@ -149,12 +153,15 @@ class ConnectSQL:
         Template: ['column_name data_type attributes', 'column_name2 data_type2 attributes', ...]
         overwrite controls if any existing table with the same name should be overwritten.
 
-        >>> database = ConnectSQL("localhost", "tech_store")
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database", overwrite = True)
         >>> database.create_table("new_table", ["id tinyint unique"])
         >>> database.cursor.execute("show tables")
         >>> tables = database.cursor.fetchall()
         >>> ("new_table",) in tables
         True
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
         """
         try:
             if overwrite:
@@ -162,25 +169,8 @@ class ConnectSQL:
             self.cursor.execute(
                 f"create table if not exists {table} ({", ".join(table_info)})"
             )
-            # self.database_info[table] = table_info
         except Exception as e:
             print(f"Error creating table:", e)
-
-    def drop_table(self, database: str) -> None:
-        """
-        Drops table.
-
-        >>> database = ConnectSQL("localhost", "tech_store")
-        >>> database.drop_table("new_table")
-        >>> database.cursor.execute("show tables")
-        >>> tables = database.cursor.fetchall()
-        >>> ("new_table",) in tables
-        False
-        """
-        try:
-            self.cursor.execute(f"drop table if exists {database}")
-        except Exception as e:
-            print(f"Error dropping table:", e)
 
     def commit(self) -> None:
         self.connection.commit()
@@ -360,3 +350,42 @@ class ConnectSQL:
             query += f"{join_type} join {table} on {tables[0]}.{columns[i]} = {table}.{columns[i]} "
 
         return query
+
+    def drop_table(self, database: str) -> None:
+        """
+        Drops table.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database", overwrite = True)
+        >>> database.create_table("new_table", ["id tinyint"], overwrite = True)
+        >>> database.cursor.execute("show tables")
+        >>> ("new_table",) in database.cursor.fetchall()
+        True
+        >>> database.drop_table("new_table")
+        >>> database.cursor.execute("show tables")
+        >>> ("new_table",) in database.cursor.fetchall()
+        False
+        """
+        try:
+            self.cursor.execute(f"drop table if exists {database}")
+        except Exception as e:
+            print(f"Error dropping table:", e)
+
+    def drop_database(self, database: str) -> None:
+        """
+        Drops database.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database", overwrite = True)
+        >>> database.cursor.execute("show databases")
+        >>> ("new_database",) in database.cursor.fetchall()
+        True
+        >>> database.drop_database("new_database")
+        >>> database.cursor.execute("show databases")
+        >>> ("new_database",) in database.cursor.fetchall()
+        False
+        """
+        try:
+            self.cursor.execute(f"drop database if exists {database}")
+        except Exception as e:
+            print(f"Error dropping database:", e)
