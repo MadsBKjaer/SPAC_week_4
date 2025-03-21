@@ -71,7 +71,6 @@ class ConnectSQL:
         try:
             self.connection = sql.connect(**connection_args)
         except Exception as e:
-            # self.connection = None
             print(f"Error creating connection:", e)
 
     def create_cursor(self) -> None:
@@ -394,7 +393,7 @@ class ConnectSQL:
         conditions: list[tuple[str]],
         auto_commit: bool = True,
     ) -> None:
-        if table not in self.database_info:
+        if table not in self.tables():
             print(f"Table {table} does not exist.")
             return
 
@@ -412,7 +411,7 @@ class ConnectSQL:
     def delete(
         self, table: str, conditions: list[tuple[str]], auto_commit: bool = True
     ) -> None:
-        if table not in self.database_info:
+        if table not in self.tables():
             print(f"Table {table} does not exist.")
             return
 
@@ -435,7 +434,7 @@ class ConnectSQL:
         If a foreign table is added a foreign key will be added to the table referencing the primary key.
         If foreign column is not provided it is assumed that the primary and foreign column have the same name, and the primary column is reused.
         """
-        if primary_table not in self.database_info:
+        if primary_table not in self.tables():
             print(f"Table {primary_table} does not exist.")
             return
         primary_query: str = (
@@ -446,7 +445,7 @@ class ConnectSQL:
         if foreign_table is None:
             return
 
-        if foreign_table not in self.database_info:
+        if foreign_table not in self.tables():
             print(f"Table {foreign_table} does not exist.")
             return
 
@@ -461,9 +460,10 @@ class ConnectSQL:
         self.run_query(foreign_query)
 
     def join(self, tables: list[str], join_type: str, columns: list[str]) -> str:
-        if not set(tables).issubset(self.database_info):
-            print(f"One of tables {tables} does not exist.")
-            return
+        for table in tables:
+            if table not in self.tables():
+                print(f"Table {table} does not exist.")
+                return
 
         query: str = f"{tables[0]} "
         for i, table in enumerate(tables[1:]):
