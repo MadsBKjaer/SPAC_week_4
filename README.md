@@ -1,2 +1,11 @@
-# w4
- Week 4: Deeper dive into SQL
+# Week 4: Integrating MySQL with Python
+## Before running
+Create a .env file with a line like: 
+* env_key = "user=_____,password=_____,host=_____,port=_____"
+Example of entry in .env file that allows for connecting to localhost:
+* localhost = "user=root,password=*****,host=localhost,port=3306"
+* Swap "*****" for you actual password.
+
+## Workflow
+1. First iteration was focus on basic functionality.
+2. Second iteration is more focus on streamlining the code and writing doc strings with doc tests.
