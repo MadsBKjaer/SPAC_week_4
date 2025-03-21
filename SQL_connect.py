@@ -12,21 +12,30 @@ class ConnectSQL:
     env_key: str
     # database_info: dict[str, list[str]]
 
-    def __init__(self, env_key: str | None = None, database: str | None = None) -> None:
+    def __init__(
+        self,
+        env_key: str | None = None,
+        database: str | None = None,
+        create_database: bool = False,
+    ) -> None:
         """
         Initializes ConnectSQL class.
         If env_key is provided retrieves connection info from .env file.
         .env file should include of following shape:
             env_key = "user=_____,password=_____,host=_____,port=_____"
         If a database is provided an attempt is made to connect the database.
+        create_database: Create database if it does not exist, default False.
 
         >>> database = ConnectSQL()
-        >>> database = ConnectSQL(database = "new_database")
+        >>> database = ConnectSQL(database = "new_database1")
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database")
-        >>> database = ConnectSQL("localhost", "new_database")
-        >>> database = ConnectSQL("localhost", "unknown_database")
-        Error selecting database: 1049 (42000): Unknown database 'unknown_database'
+        >>> database.create_database("new_database1")
+        >>> database = ConnectSQL("localhost", "new_database1")
+        >>> database = ConnectSQL("localhost", "new_database2")
+        Error selecting database: 1049 (42000): Unknown database 'new_database2'
+        >>> database = ConnectSQL("localhost", "new_database2", create_database = True)
+        >>> database.drop_database("new_database1")
+        >>> database.drop_database("new_database2")
         >>> database.close_all()
         """
         self.connection = None
@@ -37,8 +46,13 @@ class ConnectSQL:
         self.env_key = env_key
         self.connect()
         self.create_cursor()
-        if database:
-            self.use_database(database)
+
+        if not database:
+            return
+        if create_database:
+            self.create_database(database)
+            return
+        self.use_database(database)
 
     def connect(self, connection_args: dict[str, str] | None = None) -> None:
         """
