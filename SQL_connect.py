@@ -7,8 +7,8 @@ import mysql.connector.cursor as sql_cursor
 
 
 class ConnectSQL:
-    connection: sql.MySQLConnection
-    cursor: sql_cursor.MySQLCursor
+    connection: sql.MySQLConnection | None
+    cursor: sql_cursor.MySQLCursor | None
     env_key: str
     database_info: dict[str, list[str]]
 
@@ -27,7 +27,10 @@ class ConnectSQL:
         >>> database = ConnectSQL("localhost", "unknown_database")
         Error selecting database: 1049 (42000): Unknown database 'unknown_database'
         """
+        self.connection = None
+        self.cursor = None
         if env_key is None:
+            self.env_key = None
             return
         self.env_key = env_key
         self.connect()
@@ -62,12 +65,26 @@ class ConnectSQL:
         >>> database.create_cursor()
         >>> database = ConnectSQL()
         >>> database.create_cursor()
-        Error creating cursor: 'ConnectSQL' object has no attribute 'connection'
+        Error creating cursor: 'NoneType' object has no attribute 'cursor'
         """
         try:
             self.cursor = self.connection.cursor()
         except Exception as e:
             print(f"Error creating cursor:", e)
+
+    def close_all(self) -> None:
+        """
+        Closes oth cursor and connection.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.close_all()
+        >>> database = ConnectSQL()
+        >>> database.close_all()
+        """
+        if self.cursor:
+            self.cursor.close()
+        if self.connection:
+            self.connection.close()
 
     def create_database(
         self, database: str, use: bool = True, overwrite: bool = False
@@ -102,10 +119,6 @@ class ConnectSQL:
             self.cursor.execute(f"use {database}")
         except Exception as e:
             print(f"Error selecting database:", e)
-
-    def close_all(self) -> None:
-        self.cursor.close()
-        self.connection.close()
 
     def commit(self) -> None:
         self.connection.commit()
