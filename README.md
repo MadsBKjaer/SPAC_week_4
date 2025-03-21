@@ -1,7 +1,8 @@
 # Week 4: Integrating MySQL with Python
 ## Before running
 Create a .env file with a line like: 
-* env_key = "user=_____,password=_____,host=_____,port=_____"
+* env_key = "user=your_username,password=your_password,host=your_host,port=your_port"
+
 Example of entry in .env file that allows for connecting to localhost:
 * localhost = "user=root,password=*****,host=localhost,port=3306"
 * Swap "*****" for you actual password.
