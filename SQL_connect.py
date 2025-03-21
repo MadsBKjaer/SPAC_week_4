@@ -23,7 +23,7 @@ class ConnectSQL:
         >>> database = ConnectSQL()
         >>> database = ConnectSQL(database = "new_database")
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", overwrite = True)
+        >>> database.create_database("new_database")
         >>> database = ConnectSQL("localhost", "new_database")
         >>> database = ConnectSQL("localhost", "unknown_database")
         Error selecting database: 1049 (42000): Unknown database 'unknown_database'
@@ -100,14 +100,14 @@ class ConnectSQL:
         Takes a database name, use: whether or not created database should be used right away and if any existing database of same name should be overwritten.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", overwrite = True)
+        >>> database.create_database("new_database")
         >>> database.cursor.execute("select database()")
         >>> ("new_database",) in database.cursor.fetchall()
         True
         >>> database.drop_database("new_database")
         >>> database.close_all()
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", use = False, overwrite = True)
+        >>> database.create_database("new_database", use = False)
         >>> database.cursor.execute("show databases")
         >>> ("new_database",) in database.cursor.fetchall()
         True
@@ -129,7 +129,7 @@ class ConnectSQL:
         Selects database to use.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", use = False, overwrite = True)
+        >>> database.create_database("new_database", use = False)
         >>> database.use_database("new_database")
         >>> database.cursor.execute("select database()")
         >>> ("new_database",) in database.cursor.fetchall()
@@ -154,7 +154,7 @@ class ConnectSQL:
         overwrite controls if any existing table with the same name should be overwritten.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", overwrite = True)
+        >>> database.create_database("new_database")
         >>> database.create_table("new_table", ["id tinyint unique"])
         >>> database.cursor.execute("show tables")
         >>> tables = database.cursor.fetchall()
@@ -173,7 +173,13 @@ class ConnectSQL:
             print(f"Error creating table:", e)
 
     def commit(self) -> None:
-        self.connection.commit()
+        """
+        Commits database changes.
+        """
+        try:
+            self.connection.commit()
+        except Exception as e:
+            print(f"Error committing:", e)
 
     def run_query(self, query: str, auto_commit: bool = True) -> None:
         try:
@@ -198,27 +204,85 @@ class ConnectSQL:
         except Exception as error:
             print(f"Error executing queries '{query}':\n\t", error)
 
-    def insert_data(self, table: str, csv_path: str) -> None:
+    def insert_data(
+        self,
+        table: str,
+        data: str | list[list[str]],
+        table_columns: list[str] | None = None,
+        data_columns: list[str] | None = None,
+        auto_commit: bool = True,
+    ) -> None:
         """
-        Takes a table name and a path to a csv file and inserts the data from the csv file into the table.
-        Note: does assume that the tables columns are in the same order as in the csv file.
-        Prints column names from both table and csv so you can see if the ordering is as expected.
+        Inserts data into table.
+        Accepts data as path to csv file or list of list of values i.e. [[value11, value12], [value21, value22]].
+        Accepts table columns as a way to control order of columns. Defaults to the order of columns that the table provides if unprovided.
+        Accepts data columns which is used for printing source and destination columns (debugging tool).
+        If a csv path is provided the input is ignored and column names from the csv file is used.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database")
+        >>> database.create_table("new_table", ["first_name varchar(255)", "last_name varchar(255)"])
+        >>> database.insert_data("new_table", [["John", "Smith"], ["Karen", "Johnson"]])
+        >>> database.close_all()
+        >>> database = ConnectSQL("localhost", "new_database")
+        >>> database.cursor.execute("select * from new_table")
+        >>> database.cursor.fetchall()
+        [('John', 'Smith'), ('Karen', 'Johnson')]
+        >>> database.create_table("new_table", ["id tinyint", "name varchar(255)", "price float(15, 5)"], overwrite = True)
+        >>> database.insert_data("new_table", path.join("data", "products.csv"), auto_commit = False)
+        Mapping columns with following conventions: id -> id, name -> name, price -> price
+        >>> database.cursor.execute("select * from new_table where id = 2")
+        >>> database.cursor.fetchall()
+        [(2, 'Tablet', 490.03461)]
+        >>> database.close_all()
+        >>> database = ConnectSQL("localhost", "new_database")
+        >>> database.cursor.execute("select * from new_table where id = 2")
+        >>> database.cursor.fetchall()
+        []
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
         """
-        columns = self.columns(table)
-        with open(csv_path, "r") as csv_file:
-            csv_reader = csv.reader(csv_file)
-            list_of_csv = list(csv_reader)
 
-        headers: list[str] = list_of_csv[0]
-        data: list[list[str]] = list_of_csv[1:]
+        if table_columns is None:
+            table_columns = self.columns(table)
 
-        print(
-            f"Mapping {csv_path} to {table} with following conventions:\n\t{"\n\t".join([f"{csv_column} -> {table_column}" for csv_column, table_column in zip(headers, columns)])}"
-        )
-        query: str = (
-            f"insert into {table} ({", ".join(columns)}) values ({", ".join(["%s" for _ in columns])})"
-        )
-        self.run_many_queries(query, data)
+        if type(data) is str:
+            data, data_columns = self.read_csv(data)
+
+        if data_columns is not None:
+            print(
+                f"Mapping columns with following conventions: {", ".join([f"{data_column} -> {table_column}" for data_column, table_column in zip(data_columns, table_columns)])}"
+            )
+
+        try:
+            self.cursor.executemany(
+                f"insert into {table} ({", ".join(table_columns)}) values ({", ".join(["%s" for _ in table_columns])})",
+                data,
+            )
+        except Exception as e:
+            print(f"Error inserting data:", e)
+
+        if auto_commit:
+            self.commit()
+
+    def read_csv(self, csv_path: str) -> tuple[list[list[str]], list[str]]:
+        """
+        Reads csv file from path and returns (data, column names)
+
+        >>> database = ConnectSQL()
+        >>> data, columns = database.read_csv(path.join("data", "products.csv"))
+        >>> data[2]
+        ['2', 'Tablet', '490.0346']
+        >>> columns
+        ['id', 'name', 'price']
+        """
+        try:
+            with open(csv_path, "r") as csv_file:
+                csv_reader = csv.reader(csv_file)
+                list_of_csv = list(csv_reader)
+            return list_of_csv[1:], list_of_csv[0]
+        except Exception as e:
+            print(f"Error reading csv file:", e)
 
     def create_tables(
         self, table_dict: dict[str, list[str]], data_paths: dict[str, list[str]] = None
@@ -237,35 +301,77 @@ class ConnectSQL:
     def columns(self, table: str) -> list[str]:
         """
         Returns column names of a desired table.
-        Note: column names CANNOT contain whitespace.
-        """
-        if table not in self.database_info:
-            print(f"Table {table} does not exist.")
-            return []
-        return [column_info.split()[0] for column_info in self.database_info[table]]
 
-    def tables(self) -> list:
-        return self.database_info.keys()
-
-    def select(self, table: str, columns: list[str] | str | None = None) -> list:
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database")
+        >>> database.create_table("new_table", ["first_name varchar(255)", "last_name varchar(255)"])
+        >>> database.columns("new_table")
+        ['first_name', 'last_name']
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
         """
-        Takes table name and columns and returns given columns from desired table as list.
-        To select all columns let the argument columns be None (default behavior).
+        try:
+            self.cursor.execute(f"show columns from {table}")
+        except Exception as e:
+            print(f"Error getting columns:", e)
+
+        columns = self.cursor.fetchall()
+        return [column[0] for column in columns]
+
+    def tables(self) -> list[str]:
+        """
+        Shows tables in current database.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database")
+        >>> database.create_table("new_table1", ["first_name varchar(255)", "last_name varchar(255)"])
+        >>> database.create_table("new_table2", ["first_name varchar(255)", "last_name varchar(255)"])
+        >>> database.tables()
+        ['new_table1', 'new_table2']
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
+        """
+        try:
+            self.cursor.execute("show tables")
+        except Exception as e:
+            print(f"Error getting tables:", e)
+
+        tables = self.cursor.fetchall()
+        return [table[0] for table in tables]
+
+    def select(self, table: str, columns: list[str] | str | None = None) -> None:
+        """
+        Takes a table and columns and returns given columns from desired table as list.
+        To select all columns let the argument columns be None or "*" (default behavior).
         To select multiple columns provide a list of column names.
         A single column can be provided as a string.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.create_database("new_database")
+        >>> database.create_table("new_table", ["first_name varchar(255)", "last_name varchar(255)", "country varchar(255)"])
+        >>> database.insert_data("new_table", [["John", "Smith", "U.K."], ["Karen", "Johnson", "CAreNADA"], ["John", "Cena", "USA"]])
+        >>> database.select("new_table")
+        >>> database.cursor.fetchall()
+        [('John', 'Smith', 'U.K.'), ('Karen', 'Johnson', 'CAreNADA'), ('John', 'Cena', 'USA')]
+        >>> database.select("new_table", ["last_name", "country"])
+        >>> database.cursor.fetchall()
+        [('Smith', 'U.K.'), ('Johnson', 'CAreNADA'), ('Cena', 'USA')]
+        >>> database.select("new_table", "first_name")
+        >>> database.cursor.fetchall()
+        [('John',), ('Karen',), ('John',)]
+        >>> database.drop_database("new_database")
+        >>> database.close_all()
         """
-        # if table not in self.database_info:
-        #     print(f"Table {table} does not exist.")
-        #     return []
 
         if columns is None:
             columns = "*"
         elif type(columns) is list:
             columns = ", ".join(columns)
 
-        query: str = f"select {columns} from {table}"
-        self.cursor.execute(query)
-        return self.cursor.fetchall()
+        try:
+            self.cursor.execute(f"select {columns} from {table}")
+        except Exception as e:
+            print(f"Error selecting:", e)
 
     def update(
         self,
@@ -356,8 +462,8 @@ class ConnectSQL:
         Drops table.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", overwrite = True)
-        >>> database.create_table("new_table", ["id tinyint"], overwrite = True)
+        >>> database.create_database("new_database")
+        >>> database.create_table("new_table", ["id tinyint"])
         >>> database.cursor.execute("show tables")
         >>> ("new_table",) in database.cursor.fetchall()
         True
@@ -376,7 +482,7 @@ class ConnectSQL:
         Drops database.
 
         >>> database = ConnectSQL("localhost")
-        >>> database.create_database("new_database", overwrite = True)
+        >>> database.create_database("new_database")
         >>> database.cursor.execute("show databases")
         >>> ("new_database",) in database.cursor.fetchall()
         True
