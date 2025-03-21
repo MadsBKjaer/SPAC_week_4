@@ -10,7 +10,7 @@ class ConnectSQL:
     connection: sql.MySQLConnection | None
     cursor: sql_cursor.MySQLCursor | None
     env_key: str
-    database_info: dict[str, list[str]]
+    # database_info: dict[str, list[str]]
 
     def __init__(self, env_key: str | None = None, database: str | None = None) -> None:
         """
@@ -96,15 +96,35 @@ class ConnectSQL:
         >>> database = ConnectSQL("localhost")
         >>> database.create_database("new_database")
         >>> database.cursor.execute("select database()")
-        >>> database.cursor.fetchall()
-        [('new_database',)]
+        >>> databases = database.cursor.fetchall()
+        >>> ("new_database",) in databases
+        True
         """
-        if overwrite:
-            self.cursor.execute(f"drop database if exists {database}")
-        self.cursor.execute(f"create database if not exists {database}")
+        try:
+            if overwrite:
+                self.cursor.execute(f"drop database if exists {database}")
+            self.cursor.execute(f"create database if not exists {database}")
+        except Exception as e:
+            print(f"Error creating database:", e)
 
         if use:
             self.use_database(database)
+
+    def drop_database(self, database: str) -> None:
+        """
+        Drops database.
+
+        >>> database = ConnectSQL("localhost")
+        >>> database.drop_database("new_database")
+        >>> database.cursor.execute("show databases")
+        >>> databases = database.cursor.fetchall()
+        >>> ("new_database",) in databases
+        False
+        """
+        try:
+            self.cursor.execute(f"drop database if exists {database}")
+        except Exception as e:
+            print(f"Error dropping database:", e)
 
     def use_database(self, database: str) -> None:
         """
@@ -119,6 +139,48 @@ class ConnectSQL:
             self.cursor.execute(f"use {database}")
         except Exception as e:
             print(f"Error selecting database:", e)
+
+    def create_table(
+        self, table: str, table_info: list[str], overwrite: bool = False
+    ) -> None:
+        """
+        Takes a table name and table info and creates a table.
+        Table info should be a list of string providing datatype and additional attributes.
+        Template: ['column_name data_type attributes', 'column_name2 data_type2 attributes', ...]
+        overwrite controls if any existing table with the same name should be overwritten.
+
+        >>> database = ConnectSQL("localhost", "tech_store")
+        >>> database.create_table("new_table", ["id tinyint unique"])
+        >>> database.cursor.execute("show tables")
+        >>> tables = database.cursor.fetchall()
+        >>> ("new_table",) in tables
+        True
+        """
+        try:
+            if overwrite:
+                self.cursor.execute(f"drop table if exists {table}")
+            self.cursor.execute(
+                f"create table if not exists {table} ({", ".join(table_info)})"
+            )
+            # self.database_info[table] = table_info
+        except Exception as e:
+            print(f"Error creating table:", e)
+
+    def drop_table(self, database: str) -> None:
+        """
+        Drops table.
+
+        >>> database = ConnectSQL("localhost", "tech_store")
+        >>> database.drop_table("new_table")
+        >>> database.cursor.execute("show tables")
+        >>> tables = database.cursor.fetchall()
+        >>> ("new_table",) in tables
+        False
+        """
+        try:
+            self.cursor.execute(f"drop table if exists {database}")
+        except Exception as e:
+            print(f"Error dropping table:", e)
 
     def commit(self) -> None:
         self.connection.commit()
@@ -145,21 +207,6 @@ class ConnectSQL:
             self.commit()
         except Exception as error:
             print(f"Error executing queries '{query}':\n\t", error)
-
-    def create_table(self, table: str, table_info: list[str]) -> None:
-        """
-        Takes a table name and table info and creates a table.
-        Table info should be a list of string providing datatype and additional attributes.
-        Template: ['column_name data_type attributes', 'column_name2 data_type2 attributes', ...]
-        """
-        try:
-            query: str = (
-                f"drop table if exists {table}; create table if not exists {table} ({", ".join(table_info)})"
-            )
-            self.run_query(query)
-            self.database_info[table] = table_info
-        except Exception as error:
-            print(f"Error creating table '{table}':\n\t", error)
 
     def insert_data(self, table: str, csv_path: str) -> None:
         """
