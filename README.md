@@ -7,6 +7,10 @@ Example of entry in .env file that allows for connecting to localhost:
 * localhost = "user=root,password=*****,host=localhost,port=3306"
 * Swap "*****" for you actual password.
 
+## Running the code
+* Run main.py to create a tech store database and populate it with tables and data from csv files.
+* Maybe run doctests in SQL_connect.py
+
 ## Workflow
 1. First iteration was focus on basic functionality.
 2. Second iteration is more focus on streamlining the code and writing doc strings with doc tests.
