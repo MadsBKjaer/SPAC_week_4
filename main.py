@@ -37,19 +37,16 @@ tables["products"] = [
 
 
 if __name__ == "__main__":
-    db_name: str = "tech_store"
-    database = ConnectSQL(env_key="tech_store_db", reset_database=True)
-
     try:
+        database = ConnectSQL("localhost")
+        database.create_database("tech_store", overwrite=True)
         database.create_tables(tables, data_paths)
-        # database.update(
-        #     "products",
-        #     [("product_name", "Phone"), ("product_price", 10000)],
-        #     [("product_name", "=", "Phone")],
-        # )
-        # database.delete("products", [("product_name", "=", "Phone")])
-        # print(database.database_info)
-        # print(database.tables())
+        database.update(
+            "products",
+            [("product_name", "Phone"), ("price", 10000)],
+            [("product_name", "=", "Smartphone")],
+        )
+        database.delete("products", [("product_name", "=", "Phone")])
         database.add_key("orders", "order_id")
         database.add_key("customers", "customer_id", "orders")
         database.add_key("products", "product_id", "orders")
@@ -57,9 +54,8 @@ if __name__ == "__main__":
             ["orders", "products", "customers"], "inner", ["product_id", "customer_id"]
         )
         print(join_query)
-        result = database.select(join_query)
-        print(result)
-        pass
+        database.select(join_query)
+        print(database.cursor.fetchall()[:5])
     except Exception as error:
         print(f"Error running test:", error)
     finally:
